@@ -116,23 +116,30 @@ with tab1:
             sub_df = growth_df[growth_df["개체번호"] == cid].sort_values("조사일자").copy()
 
             # ================= 안전한 숫자 변환 =================
-            # 문자열 → 숫자 / 오류는 NaN 처리
             sub_df[selected_feature] = pd.to_numeric(sub_df[selected_feature], errors="coerce")
 
             # ================= Z-score 기반 이상치 =================
             series_clean = sub_df[selected_feature].dropna()
 
-            # 데이터가 모두 NaN인 경우 → 이상치 처리 불가
-            if series_clean.empty:
-                sub_df["Zscore"] = np.nan
-                z_outliers = pd.DataFrame()
-            else:
-                # 안전한 Z-score 계산
-                z = stats.zscore(series_clean)
-                sub_df.loc[series_clean.index, "Zscore"] = z
+            # 결과 컬럼 초기화
+            sub_df["Zscore"] = np.nan
 
-                # Zscore 가 ±2 이상인 값
+            # 데이터가 2개 이상이고, 표준편차가 0이 아닐 때만 계산
+            if len(series_clean) > 1 and series_clean.std() != 0:
+
+                # 표준 score 계산 (직접 수식)
+                mean_val = series_clean.mean()
+                std_val = series_clean.std()
+
+                z_scores = (series_clean - mean_val) / std_val
+                sub_df.loc[series_clean.index, "Zscore"] = z_scores
+
+                # Zscore 기준 이상치
                 z_outliers = sub_df[abs(sub_df["Zscore"]) > 2]
+
+            else:
+                # 데이터가 너무 적거나 std=0 → Zscore 계산 불가 → 이상치 없음
+                z_outliers = pd.DataFrame()
 
             # ================= 이동평균 기반 이상치 =================
             # 이동평균 계산 (window=3)
