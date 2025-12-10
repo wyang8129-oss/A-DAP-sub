@@ -12,13 +12,16 @@ from statsmodels.stats.outliers_influence import variance_inflation_factor
 # ===============================================
 # 한글 폰트 설정
 # ===============================================
-if platform.system() == 'Windows':
-    matplotlib.rc('font', family='Malgun Gothic')
-elif platform.system() == 'Darwin':
-    matplotlib.rc('font', family='AppleGothic')
+# === Matplotlib 폰트 적용 ===
+FONT_PATH = "./fonts/NanumGothic.ttf"
+
+if os.path.exists(FONT_PATH):
+    fm.fontManager.addfont(FONT_PATH)
+    plt.rc('font', family='NanumGothic')
 else:
-    matplotlib.rc('font', family='NanumGothic')
-matplotlib.rc('axes', unicode_minus=False)
+    st.warning("⚠ NanumGothic.ttf 파일을 찾을 수 없어 기본 폰트를 사용합니다.")
+
+plt.rcParams['axes.unicode_minus'] = False
 
 st.set_page_config(page_title="토마토 생육·수확 통합 분석", layout="wide")
 st.title("생육 + 수확 데이터 통합 분석 대시보드")
@@ -489,3 +492,4 @@ with tab4:
         fig.savefig("상관관계_히트맵.png")
         with open("상관관계_히트맵.png", "rb") as f:
             st.download_button("📥 상관관계_히트맵 다운로드", f, "상관관계_히트맵.png", "image/png")
+
