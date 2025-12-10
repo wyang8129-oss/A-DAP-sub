@@ -119,6 +119,8 @@ with tab1:
             sub_df[selected_feature] = pd.to_numeric(sub_df[selected_feature], errors="coerce")
 
             # ================= Z-score 기반 이상치 =================
+            # 숫자 변환
+            sub_df[selected_feature] = pd.to_numeric(sub_df[selected_feature], errors="coerce")
             series_clean = sub_df[selected_feature].dropna()
 
             # 결과 컬럼 초기화
