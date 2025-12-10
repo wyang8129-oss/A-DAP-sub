@@ -8,6 +8,9 @@ import platform
 import numpy as np
 from scipy import stats
 from statsmodels.stats.outliers_influence import variance_inflation_factor
+import matplotlib
+import platform
+import os
 
 # ===============================================
 # 한글 폰트 설정
@@ -492,4 +495,5 @@ with tab4:
         fig.savefig("상관관계_히트맵.png")
         with open("상관관계_히트맵.png", "rb") as f:
             st.download_button("📥 상관관계_히트맵 다운로드", f, "상관관계_히트맵.png", "image/png")
+
 
