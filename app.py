@@ -34,7 +34,6 @@ else:
 
 plt.rcParams['axes.unicode_minus'] = False
 
-
 st.set_page_config(page_title="토마토 생육·수확 통합 분석", layout="wide")
 st.title("생육 + 수확 데이터 통합 분석 대시보드")
 st.markdown("---")
@@ -116,34 +115,62 @@ with tab1:
         for cid in selected_ids:
             sub_df = growth_df[growth_df["개체번호"] == cid].sort_values("조사일자").copy()
 
-            # ============= Z-score 기반 이상치 =============
-            z_scores = stats.zscore(sub_df[selected_feature])
-            sub_df["Zscore"] = z_scores
-            z_outliers = sub_df[abs(sub_df["Zscore"]) > 2]
+            # ================= 안전한 숫자 변환 =================
+            # 문자열 → 숫자 / 오류는 NaN 처리
+            sub_df[selected_feature] = pd.to_numeric(sub_df[selected_feature], errors="coerce")
 
-            # ============= 이동평균 기반 이상치 =============
+            # ================= Z-score 기반 이상치 =================
+            series_clean = sub_df[selected_feature].dropna()
+
+            # 데이터가 모두 NaN인 경우 → 이상치 처리 불가
+            if series_clean.empty:
+                sub_df["Zscore"] = np.nan
+                z_outliers = pd.DataFrame()
+            else:
+                # 안전한 Z-score 계산
+                z = stats.zscore(series_clean)
+                sub_df.loc[series_clean.index, "Zscore"] = z
+
+                # Zscore 가 ±2 이상인 값
+                z_outliers = sub_df[abs(sub_df["Zscore"]) > 2]
+
+            # ================= 이동평균 기반 이상치 =================
+            # 이동평균 계산 (window=3)
             sub_df["MA"] = sub_df[selected_feature].rolling(window=3, min_periods=1).mean()
             sub_df["MA_diff"] = abs(sub_df[selected_feature] - sub_df["MA"])
+
+            # 임계값 100 초과
             ma_outliers = sub_df[sub_df["MA_diff"] > 100]
 
-            outliers = pd.concat([z_outliers, ma_outliers]).drop_duplicates()
-            outliers["개체번호"] = cid
+            # ================= 이상치 통합 =================
+            if not z_outliers.empty or not ma_outliers.empty:
+                outliers = pd.concat([z_outliers, ma_outliers]).drop_duplicates()
+            else:
+                outliers = pd.DataFrame()
+
+            # 개체번호 추가
+            if not outliers.empty:
+                outliers["개체번호"] = cid
+
+            # 리스트에 저장
             all_outliers_list.append(outliers)
 
-            # ============= 이상치 처리 =============
+            # ================= 이상치 처리 =================
             cleaned_df = sub_df.copy()
 
-            if replace_option == "보간(interpolate)":
-                cleaned_df.loc[outliers.index, selected_feature] = np.nan
-                cleaned_df[selected_feature] = cleaned_df[selected_feature].interpolate()
+            if not outliers.empty:
 
-            elif replace_option == "이전값(Fill Forward)":
-                cleaned_df.loc[outliers.index, selected_feature] = np.nan
-                cleaned_df[selected_feature] = cleaned_df[selected_feature].fillna(method="ffill")
+                if replace_option == "보간(interpolate)":
+                    cleaned_df.loc[outliers.index, selected_feature] = np.nan
+                    cleaned_df[selected_feature] = cleaned_df[selected_feature].interpolate()
 
-            elif replace_option == "평균값(전체 mean)":
-                mean_val = cleaned_df[selected_feature].mean()
-                cleaned_df.loc[outliers.index, selected_feature] = mean_val
+                elif replace_option == "이전값(Fill Forward)":
+                    cleaned_df.loc[outliers.index, selected_feature] = np.nan
+                    cleaned_df[selected_feature] = cleaned_df[selected_feature].fillna(method="ffill")
+
+                elif replace_option == "평균값(전체 mean)":
+                    mean_val = cleaned_df[selected_feature].mean()
+                    cleaned_df.loc[outliers.index, selected_feature] = mean_val
 
             # ============= 그래프 =============
             ax.plot(
@@ -504,8 +531,3 @@ with tab4:
         fig.savefig("상관관계_히트맵.png")
         with open("상관관계_히트맵.png", "rb") as f:
             st.download_button("📥 상관관계_히트맵 다운로드", f, "상관관계_히트맵.png", "image/png")
-
-
-
-
-
