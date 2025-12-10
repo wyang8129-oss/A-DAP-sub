@@ -1,6 +1,7 @@
 import streamlit as st
 import pandas as pd
 import matplotlib.pyplot as plt
+import matplotlib.dates as mdates
 import seaborn as sns
 import matplotlib
 import platform
@@ -11,20 +12,16 @@ from statsmodels.stats.outliers_influence import variance_inflation_factor
 # ===============================================
 # 한글 폰트 설정
 # ===============================================
-st.markdown("""
-<style>
-@font-face {
-    font-family: 'NanumGothic';
-    src: url('NanumGothic.ttf') format('truetype');
-}
-html, body, [class*="css"] {
-    font-family: 'NanumGothic', sans-serif;
-}
-</style>
-""", unsafe_allow_html=True)
+if platform.system() == 'Windows':
+    matplotlib.rc('font', family='Malgun Gothic')
+elif platform.system() == 'Darwin':
+    matplotlib.rc('font', family='AppleGothic')
+else:
+    matplotlib.rc('font', family='NanumGothic')
+matplotlib.rc('axes', unicode_minus=False)
 
-st.set_page_config(page_title="토마토 생육·수확 데이터 통합 대시보드", layout="wide")
-st.title("생육 + 수확 데이터 통합  대시보드")
+st.set_page_config(page_title="토마토 생육·수확 통합 분석", layout="wide")
+st.title("생육 + 수확 데이터 통합 분석 대시보드")
 st.markdown("---")
 
 tab1, tab2, tab3, tab4 = st.tabs(
@@ -44,6 +41,9 @@ with tab1:
         st.subheader("📌 생육 데이터 미리보기")
         st.dataframe(growth_df.head())
 
+        # =============================
+        # 개체번호 필터링
+        # =============================
         if "개체번호" in growth_df.columns:
             unique_ids = growth_df["개체번호"].unique().tolist()
             selected_ids = st.multiselect("분석할 개체번호 선택", unique_ids, default=unique_ids)
@@ -51,7 +51,9 @@ with tab1:
         else:
             st.error("❌ 생육 데이터에 '개체번호' 컬럼이 필요합니다.")
 
+        # =============================
         # 결측치 처리
+        # =============================
         if fill_option != "없음":
             for col in growth_df.columns:
                 if growth_df[col].isnull().sum() > 0:
@@ -62,24 +64,285 @@ with tab1:
                     elif fill_option == "최빈값":
                         growth_df[col] = growth_df[col].fillna(growth_df[col].mode()[0])
 
+        # =============================
+        # 시계열 그래프 + 이상치 탐색
+        # =============================
+        st.markdown("## 📈 개체별 시계열 그래프 & 이상치 탐색")
+
+        numeric_cols = [
+            col for col in growth_df.columns
+            if pd.api.types.is_numeric_dtype(growth_df[col]) and col not in ["개체번호"]
+        ]
+
+        # ⚠ 첫 번째 selectbox → key 부여
+        selected_feature = st.selectbox(
+            "시계열로 볼 생육 지표 선택",
+            numeric_cols,
+            key="growth_feature_select_1"
+        )
+
+        replace_option = st.radio(
+            "이상치 처리 방법 선택",
+            ["적용 안함", "보간(interpolate)", "이전값(Fill Forward)", "평균값(전체 mean)"],
+            horizontal=True
+        )
+
+        date_mode = st.radio(
+            "X축 날짜 표시 방식",
+            ["일 단위 그대로", "1주 단위 표시"],
+            horizontal=True
+        )
+
+        growth_df["조사일자"] = pd.to_datetime(growth_df["조사일자"])
+
+        fig, ax = plt.subplots(figsize=(10, 4))
+        all_outliers_list = []
+
+        for cid in selected_ids:
+            sub_df = growth_df[growth_df["개체번호"] == cid].sort_values("조사일자").copy()
+
+            # ============= Z-score 기반 이상치 =============
+            z_scores = stats.zscore(sub_df[selected_feature])
+            sub_df["Zscore"] = z_scores
+            z_outliers = sub_df[abs(sub_df["Zscore"]) > 2]
+
+            # ============= 이동평균 기반 이상치 =============
+            sub_df["MA"] = sub_df[selected_feature].rolling(window=3, min_periods=1).mean()
+            sub_df["MA_diff"] = abs(sub_df[selected_feature] - sub_df["MA"])
+            ma_outliers = sub_df[sub_df["MA_diff"] > 100]
+
+            outliers = pd.concat([z_outliers, ma_outliers]).drop_duplicates()
+            outliers["개체번호"] = cid
+            all_outliers_list.append(outliers)
+
+            # ============= 이상치 처리 =============
+            cleaned_df = sub_df.copy()
+
+            if replace_option == "보간(interpolate)":
+                cleaned_df.loc[outliers.index, selected_feature] = np.nan
+                cleaned_df[selected_feature] = cleaned_df[selected_feature].interpolate()
+
+            elif replace_option == "이전값(Fill Forward)":
+                cleaned_df.loc[outliers.index, selected_feature] = np.nan
+                cleaned_df[selected_feature] = cleaned_df[selected_feature].fillna(method="ffill")
+
+            elif replace_option == "평균값(전체 mean)":
+                mean_val = cleaned_df[selected_feature].mean()
+                cleaned_df.loc[outliers.index, selected_feature] = mean_val
+
+            # ============= 그래프 =============
+            ax.plot(
+                cleaned_df["조사일자"],
+                cleaned_df[selected_feature],
+                marker="o",
+                label=f"{cid}"
+            )
+
+            ax.scatter(
+                outliers["조사일자"],
+                outliers[selected_feature],
+                color="red",
+                s=70,
+                label=f"{cid} 이상치"
+            )
+
+            for t in outliers["조사일자"]:
+                ax.axvspan(
+                    t - pd.Timedelta(days=0.5),
+                    t + pd.Timedelta(days=0.5),
+                    color="red",
+                    alpha=0.15
+                )
+
+        ax.set_title(f"{selected_feature} 시계열 변화")
+        ax.set_xlabel("조사일자")
+        ax.set_ylabel(selected_feature)
+
+        locator = mdates.AutoDateLocator()
+        formatter = mdates.ConciseDateFormatter(locator)
+
+        formatter.formats[0] = "%m/%d"
+        formatter.formats[1] = "%m/%d"
+        formatter.formats[2] = "%m/%d"
+
+        ax.xaxis.set_major_locator(locator)
+        ax.xaxis.set_major_formatter(formatter)
+
+        if date_mode == "1주 단위 표시":
+            ax.xaxis.set_major_locator(mdates.WeekdayLocator(interval=1))
+            ax.xaxis.set_major_formatter(mdates.DateFormatter("%m/%d"))
+
+        plt.setp(ax.get_xticklabels(), rotation=45, ha='right', fontsize=8)
+        plt.tight_layout()
+        st.pyplot(fig)
+
+        # =============================
+        # 이상치 목록 출력
+        # =============================
+        st.markdown("### 🔍 이상치 목록 (Z-score > 2 또는 이동평균 diff > 100)")
+        if len(all_outliers_list) > 0:
+            full_outlier_df = pd.concat(all_outliers_list).sort_values(["개체번호", "조사일자"])
+            st.dataframe(full_outlier_df)
+        else:
+            st.info("📭 이상치가 없습니다.")
+
+        # =============================
+        # 조사일자 확인
+        # =============================
         if "조사일자" not in growth_df.columns:
             st.error("❌ 생육 데이터에 '조사일자' 컬럼이 필요합니다.")
         else:
-            numeric_cols = [c for c in growth_df.columns
-                            if pd.api.types.is_numeric_dtype(growth_df[c]) and c != "개체번호"]
-            non_numeric_cols = [c for c in growth_df.columns if c not in numeric_cols and c != "조사일자"]
+            growth_df["조사일자"] = pd.to_datetime(growth_df["조사일자"], errors="coerce")
 
-            growth_group = growth_df.groupby("조사일자").agg(
-                {**{col: "mean" for col in numeric_cols},
-                 **{col: "first" for col in non_numeric_cols}}
-            ).reset_index()
+            for col in growth_df.columns:
+                if col not in ["개체번호", "조사일자"]:
+                    growth_df[col] = pd.to_numeric(growth_df[col], errors="ignore")
 
-            st.subheader("🌱 생육 대표값 데이터")
+            avg_cols_raw = ["초장", "생장길이", "엽수", "엽장", "엽폭", "줄기굵기", "화방높이"]
+            avg_cols = [c for c in avg_cols_raw if c in growth_df.columns]
+
+            sum_cols_raw = [
+                "화방별총개수", "화방별꽃수", "화방별꽃봉오리수",
+                "화방별개화수", "화방별착과수", "화방별적과수", "화방별수확수"
+            ]
+            sum_cols = [c for c in sum_cols_raw if c in growth_df.columns]
+
+            agg_dict = {}
+
+            for col in growth_df.columns:
+                if col in ["개체번호", "조사일자"]:
+                    continue
+
+                if col in avg_cols and pd.api.types.is_numeric_dtype(growth_df[col]):
+                    agg_dict[col] = "mean"
+
+                elif col in sum_cols and pd.api.types.is_numeric_dtype(growth_df[col]):
+                    agg_dict[col] = "sum"
+
+                else:
+                    agg_dict[col] = "first"
+
+            growth_group = growth_df.groupby("조사일자").agg(agg_dict).reset_index()
+
+            # ------------------------------------------------------------
+            # 🌱 생육 대표값 데이터 (평균 + 합계)
+            # ------------------------------------------------------------
+
+            st.subheader("🌱 생육 대표값 데이터 (평균 + 합계)")
             st.dataframe(growth_group)
-            st.download_button("📥 생육 대표값 다운로드",
-                               growth_group.to_csv(index=False).encode("utf-8-sig"),
-                               "생육대표값.csv", "text/csv")
-            st.success("✔ 생육 데이터 처리 완료")
+
+            # ------------------------------------------------------------
+            # 📌 평균값 지표 / 총합 지표 목록
+            # ------------------------------------------------------------
+
+            avg_metrics = ["초장", "생장길이", "엽수", "엽장", "엽폭", "줄기굵기", "화방높이"]
+            sum_metrics = ["화방별총개수", "화방별꽃수", "화방별꽃봉오리수",
+                           "화방별개화수", "화방별착과수", "화방별적과수", "화방별수확수"]
+
+            st.markdown("### 📌 평균값 지표")
+            st.write(", ".join(avg_metrics))
+
+            st.markdown("### 📌 총합 지표")
+            st.write(", ".join(sum_metrics))
+
+            # ------------------------------------------------------------
+            # 📌 총합 계산 (0,000개 형식)
+            # ------------------------------------------------------------
+
+            try:
+                total_set = int(growth_group["화방별착과수"].sum())
+                total_harvest = int(growth_group["화방별수확수"].sum())
+            except Exception:
+                total_set = 0
+                total_harvest = 0
+
+            st.markdown(f"### 🌼 화방별착과수(총합): **{total_set:,} 개**")
+            st.markdown(f"### 🍅 화방별수확수(총합): **{total_harvest:,} 개**")
+
+            # ------------------------------------------------------------
+            # 📌 총생산량 % 계산
+            # ------------------------------------------------------------
+
+            if total_set > 0:
+                total_yield_rate = total_harvest / total_set * 100
+            else:
+                total_yield_rate = 0
+
+            st.markdown(f"### 📊 총생산량률: **{total_yield_rate:.2f}%**")
+
+            # ============================================================
+            # 🌱 대표값 이후 — 개체통합 시계열 그래프
+            # ============================================================
+
+            st.subheader("📈 개체통합 시계열 그래프 (총합 지표 전용)")
+
+            # ------------------------------------------------------------
+            # 총합 지표 리스트
+            # ------------------------------------------------------------
+            sum_metrics = [
+                "화방별총개수", "화방별꽃수", "화방별꽃봉오리수",
+                "화방별개화수", "화방별착과수", "화방별적과수", "화방별수확수"
+            ]
+
+            # growth_df에 존재하는 컬럼만 사용
+            sum_metrics_valid = [col for col in sum_metrics if col in growth_df.columns]
+
+            # 지표 선택
+            metric_sum = st.selectbox(
+                "시계열로 볼 총합 지표 선택",
+                sum_metrics_valid,
+                key="integrated_sum_metric"
+            )
+
+            # ------------------------------------------------------------
+            # 조사일자 기준 개체 합계 만들기
+            # ------------------------------------------------------------
+
+            df_sum_daily = (
+                growth_df.groupby("조사일자")[sum_metrics_valid]
+                .sum()
+                .reset_index()
+                .sort_values("조사일자")
+            )
+
+            # ------------------------------------------------------------
+            # 그래프 생성
+            # ------------------------------------------------------------
+
+            fig, ax = plt.subplots(figsize=(12, 5))
+
+            ax.plot(
+                df_sum_daily["조사일자"],
+                df_sum_daily[metric_sum],
+                marker="o",
+                linewidth=2
+            )
+
+            ax.set_title(f"📈 개체통합 시계열 그래프 - {metric_sum}")
+            ax.set_xlabel("조사일자")
+            ax.set_ylabel(f"{metric_sum} (합계)")
+            ax.grid()
+
+            st.pyplot(fig)
+
+            # ------------------------------------------------------------
+            # 데이터 테이블 출력
+            # ------------------------------------------------------------
+
+            st.markdown("### 📄 조사일자별 합계 데이터")
+            st.dataframe(df_sum_daily[["조사일자", metric_sum]])
+
+            # =============================
+            # TAB 1 — 데이터 다운로드
+            # =============================
+            st.download_button(
+                "📥 생육 대표값 다운로드",
+                growth_group.to_csv(index=False).encode("utf-8-sig"),
+                "생육대표값_평균합계.csv",
+                "text/csv"
+            )
+
+            st.success("✔ 생육 데이터 처리 완료 (평균 + 총합 계산)")
 
 # =============================
 # TAB 2 — 수확 데이터 처리
