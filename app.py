@@ -1,14 +1,23 @@
+
 import streamlit as st
 import pandas as pd
-import matplotlib.pyplot as plt
-import matplotlib.dates as mdates
-import seaborn as sns
-import matplotlib
-import matplotlib.font_manager as fm
-import platform
 import numpy as np
-from scipy import stats
-from statsmodels.stats.outliers_influence import variance_inflation_factor
+from datetime import timedelta
+from sklearn.model_selection import train_test_split
+from sklearn.metrics import mean_squared_error, mean_absolute_error, r2_score
+from sklearn.ensemble import RandomForestRegressor, GradientBoostingRegressor
+from xgboost import XGBRegressor
+from lightgbm import LGBMRegressor
+from sklearn.naive_bayes import GaussianNB
+import shap
+import matplotlib.pyplot as plt
+import matplotlib.font_manager as fm
+from sklearn.inspection import PartialDependenceDisplay
+import plotly.graph_objects as go
+from plotly.subplots import make_subplots
+
+import matplotlib
+import platform
 import os
 
 # ===============================================
@@ -495,6 +504,7 @@ with tab4:
         fig.savefig("상관관계_히트맵.png")
         with open("상관관계_히트맵.png", "rb") as f:
             st.download_button("📥 상관관계_히트맵 다운로드", f, "상관관계_히트맵.png", "image/png")
+
 
 
 
