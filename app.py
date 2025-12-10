@@ -4,20 +4,19 @@ import matplotlib.pyplot as plt
 import matplotlib.dates as mdates
 import seaborn as sns
 import matplotlib
+import matplotlib.font_manager as fm
 import platform
 import numpy as np
 from scipy import stats
 from statsmodels.stats.outliers_influence import variance_inflation_factor
-import matplotlib
-import platform
 import os
 
 # ===============================================
 # 한글 폰트 설정
 # ===============================================
-# === Matplotlib 폰트 적용 ===
-FONT_PATH = "./fonts/NanumGothic.ttf"
+FONT_PATH = "./fonts/NanumGothic.ttf"   # Streamlit Cloud에서는 반드시 이 경로에 업로드
 
+# Matplotlib 폰트 적용
 if os.path.exists(FONT_PATH):
     fm.fontManager.addfont(FONT_PATH)
     plt.rc('font', family='NanumGothic')
@@ -25,6 +24,7 @@ else:
     st.warning("⚠ NanumGothic.ttf 파일을 찾을 수 없어 기본 폰트를 사용합니다.")
 
 plt.rcParams['axes.unicode_minus'] = False
+
 
 st.set_page_config(page_title="토마토 생육·수확 통합 분석", layout="wide")
 st.title("생육 + 수확 데이터 통합 분석 대시보드")
@@ -495,5 +495,6 @@ with tab4:
         fig.savefig("상관관계_히트맵.png")
         with open("상관관계_히트맵.png", "rb") as f:
             st.download_button("📥 상관관계_히트맵 다운로드", f, "상관관계_히트맵.png", "image/png")
+
 
 
