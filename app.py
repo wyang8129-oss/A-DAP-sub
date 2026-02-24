@@ -14,26 +14,25 @@ from statsmodels.stats.outliers_influence import variance_inflation_factor
 # ===============================================
 import matplotlib
 import matplotlib.pyplot as plt
-import platform
-import subprocess
+import matplotlib.font_manager as fm
 import os
 
 # ----------------------------
-# 1. 한글 폰트 설치 (Cloud 환경용)
+# 1. 폰트 파일 경로
 # ----------------------------
-if platform.system() == "Linux":
-    # NanumGothic 설치
-    subprocess.run(["apt-get", "update"])
-    subprocess.run(["apt-get", "install", "-y", "fonts-nanum"])
-    matplotlib.rc('font', family='NanumGothic')
+FONT_PATH = os.path.join("fonts", "NanumGothic.ttf")  # fonts 폴더에 NanumGothic.ttf 존재
 
-elif platform.system() == "Windows":
-    matplotlib.rc('font', family='Malgun Gothic')
-elif platform.system() == "Darwin":
-    matplotlib.rc('font', family='AppleGothic')
+if not os.path.exists(FONT_PATH):
+    raise FileNotFoundError(f"폰트 파일이 없습니다: {FONT_PATH}")
+
+# ----------------------------
+# 2. matplotlib에 폰트 등록
+# ----------------------------
+fm.fontManager.addfont(FONT_PATH)
+matplotlib.rc("font", family="NanumGothic")
 
 # 마이너스 기호 깨짐 방지
-matplotlib.rc('axes', unicode_minus=False)
+matplotlib.rc("axes", unicode_minus=False)
 
 #if platform.system() == 'Windows':
 #    matplotlib.rc('font', family='Malgun Gothic')
@@ -600,5 +599,6 @@ st.download_button(
 )
 st.success("✔ 생육 데이터 처리 완료")
 st.markdown('</div>', unsafe_allow_html=True)
+
 
 
