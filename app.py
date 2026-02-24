@@ -12,13 +12,30 @@ from statsmodels.stats.outliers_influence import variance_inflation_factor
 # ===============================================
 # 한글 폰트 설정
 # ===============================================
-if platform.system() == 'Windows':
-    matplotlib.rc('font', family='Malgun Gothic')
-elif platform.system() == 'Darwin':
-    matplotlib.rc('font', family='AppleGothic')
+import matplotlib
+import platform
+import os
+
+# === Matplotlib 폰트 적용 ===
+FONT_PATH = "./fonts/NanumGothic.ttf"
+
+if os.path.exists(FONT_PATH):
+    fm.fontManager.addfont(FONT_PATH)
+    plt.rc('font', family='NanumGothic')
 else:
-    matplotlib.rc('font', family='NanumGothic')
-matplotlib.rc('axes', unicode_minus=False)
+    st.warning("⚠ NanumGothic.ttf 파일을 찾을 수 없어 기본 폰트를 사용합니다.")
+
+plt.rcParams['axes.unicode_minus'] = False
+
+st.set_page_config(layout="wide")
+
+#if platform.system() == 'Windows':
+#    matplotlib.rc('font', family='Malgun Gothic')
+#elif platform.system() == 'Darwin':
+#    matplotlib.rc('font', family='AppleGothic')
+#else:
+#    matplotlib.rc('font', family='NanumGothic')
+#matplotlib.rc('axes', unicode_minus=False)
 
 st.set_page_config(page_title="토마토 생육·수확 통합 분석", layout="wide")
 st.title("🍅 토마토 생육 + 수확 데이터 통합 분석 대시보드")
@@ -577,3 +594,4 @@ st.download_button(
 )
 st.success("✔ 생육 데이터 처리 완료")
 st.markdown('</div>', unsafe_allow_html=True)
+
